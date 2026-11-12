@@ -2,4 +2,6 @@
 <resources>
     <string name="firestore_database_id" translatable="false">ai-studio-android-0ccb0e51-02de-4d38-94ef-54f1255a8b5d</string>
     <string name="recaptcha_site_key" translatable="false">6Lct-A8uAAAAAJryEWnX9f9mQM-AcIryx-aUYVbn</string>
+    <!-- Supplied by google-services.json in a configured Firebase build; empty keeps the public build graceful. -->
+    <string name="default_web_client_id" translatable="false"></string>
 </resources>
