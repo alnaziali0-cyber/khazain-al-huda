@@ -241,9 +241,9 @@ fun EmeraldHeroCard(
     val gradient = if (isDark) {
         Brush.linearGradient(
             colors = listOf(
-                Color(0xFF202824),
-                Color(0xFF1B211E),
-                Color(0xFF202824)
+                Color(0xFF1D2220),
+                Color(0xFF151918),
+                Color(0xFF1D2220)
             )
         )
     } else {

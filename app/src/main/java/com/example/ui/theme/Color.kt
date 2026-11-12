@@ -33,24 +33,21 @@ val InkDarkText = Color(0xFF172D2B)
 val MutedSlateText = Color(0xFF637875)
 val SubtleGlassBorderLight = Color(0xFFD6E2DE)
 
-// Deep mode remains available, but uses the same teal/navy family.
-//
-// The night palette is a "soft black": near-black but never a dead #000000 slab. Keeping a hint
-// of green-teal in the dark surfaces removes the harsh contrast of a pure-black app and keeps the
-// cards readable without heavy borders.
+// Deep mode uses a matte neutral-black foundation with progressively lifted card and input
+// surfaces. Accent colors remain independent and are reserved for meaningful emphasis.
 val TurquoisePrimaryDark = Color(0xFF4D9A8C)
 val TurquoiseSecondaryDark = Color(0xFF8BC8B8)
-val AppSoftBlackBackground = Color(0xFF101312)
+val AppSoftBlackBackground = Color(0xFF0B0D0C)
 val NightSanctuaryBg = AppSoftBlackBackground
-val NightGlassSurface = Color(0xFF1B211E)
-val NightSurfaceVariant = Color(0xFF202824)
-val NightInputSurface = Color(0xFF171D1A)
+val NightGlassSurface = Color(0xFF151918)
+val NightSurfaceVariant = Color(0xFF1D2220)
+val NightInputSurface = Color(0xFF111514)
 val NightGoldAccent = Color(0xFFC6A15B)
 val NightLightText = Color(0xFFF4F5F2)
 val NightMutedText = Color(0xFFA8B1AC)
 val NightEmeraldAccent = Color(0xFF4D9A8C)
 val NightEmeraldSoft = Color(0xFF233A32)
-val SubtleGlassBorderDark = Color(0xFF2B3530)
+val SubtleGlassBorderDark = Color(0xFF303734)
 
 // Occasion adaptive accents (subtle and readable in both themes).
 val MourningBannerBgLight = Color(0xFFF6ECEF)

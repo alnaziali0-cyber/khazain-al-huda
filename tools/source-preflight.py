@@ -105,10 +105,10 @@ require("observeCachedAyahCount(): Flow<Int>" in dao, "Room exposes a live local
 require("dao.observeCachedAyahCount()" in view_model and "cachedAyahCount = cachedAyahCount" in shell, "cached Quran count reaches SettingsScreen through ViewModel")
 require("ThemeMode.SYSTEM -> darkTheme" in theme and "darkTheme = isSystemInDarkTheme()" in (ROOT / "app/src/main/java/com/example/ui/AlHadithiAppShell.kt").read_text(encoding="utf-8"), "system theme follows actual Android system mode")
 require("darkMode = LocalIsDarkThemeActive.current" in shell and "darkMode = settings.darkMode" not in shell, "Quran reader uses resolved theme state rather than legacy dark flag")
-require("LuminousCyanAccentPalette" in colors and "AppSoftBlackBackground = Color(0xFF101312)" in colors
-        and "NightGlassSurface = Color(0xFF1B211E)" in colors
-        and "NightSurfaceVariant = Color(0xFF202824)" in colors
-        and "NightInputSurface = Color(0xFF171D1A)" in colors, "soft-black dark-mode design tokens exist")
+require("LuminousCyanAccentPalette" in colors and "AppSoftBlackBackground = Color(0xFF0B0D0C)" in colors
+        and "NightGlassSurface = Color(0xFF151918)" in colors
+        and "NightSurfaceVariant = Color(0xFF1D2220)" in colors
+        and "NightInputSurface = Color(0xFF111514)" in colors, "matte-black dark-mode design tokens exist")
 require("DesignSystemPaletteTest" in "".join(
     path.read_text(encoding="utf-8", errors="ignore")
     for path in (ROOT / "app/src/test").rglob("*.kt")
@@ -186,11 +186,11 @@ require("WindowCompat.setDecorFitsSystemWindows(window, false)" in main_activity
 require("contentWindowInsets = WindowInsets(0, 0, 0, 0)" in shell
         and "WindowInsetsSides.Top" in shell,
         "the shell consumes the top inset once and leaves the navigation inset to the bar")
-require("AppSoftBlackBackground = Color(0xFF101312)" in colors
-        and "NightGlassSurface = Color(0xFF1B211E)" in colors
-        and "NightSurfaceVariant = Color(0xFF202824)" in colors
-        and "NightInputSurface = Color(0xFF171D1A)" in colors,
-        "the dark theme uses the specified charcoal, card, elevated and input surfaces")
+require("AppSoftBlackBackground = Color(0xFF0B0D0C)" in colors
+        and "NightGlassSurface = Color(0xFF151918)" in colors
+        and "NightSurfaceVariant = Color(0xFF1D2220)" in colors
+        and "NightInputSurface = Color(0xFF111514)" in colors,
+        "the dark theme uses a matte-black base with lifted panels and input surfaces")
 require("LocalStatusColors" in theme and "StatusSuccessDark" in colors,
         "the semantic status colours are resolved centrally per theme")
 require("DeveloperAccessController.isMultiTapGesture" in settings,
@@ -199,11 +199,12 @@ require("isAuthorizedDeveloperUser" in auth and "isOwnerAdmin()" in (ROOT / "fir
         "privileged developer operations require verified Firebase identity and server-side Firestore rules")
 require("onLeaveDeveloperMode" in (ROOT / "app/src/main/java/com/example/ui/screens/DeveloperDiagnosticsTab.kt").read_text(encoding="utf-8"),
         "the developer panel offers a clear way to leave developer mode")
-require("title = \"إعدادات المظهر\"" in settings and "title = \"إعدادات القراءة\"" in settings
-        and "title = \"إعدادات مواقيت الصلاة\"" in settings and "title = \"إعدادات الصوت\"" in settings
-        and "title = \"إعدادات الإشعارات\"" in settings and "title = \"إعدادات البيانات والمزامنة\"" in settings
-        and "title = \"إعدادات اللغة\"" in settings and "title = \"حول التطبيق\"" in settings,
-        "the settings screen is organised into the eight required sections")
+require("SettingsCategory.entries" in settings and "SettingsCategoryTile(" in settings
+        and "selectedCategoryKey = null" in settings and "BackHandler" in settings
+        and all(key in settings for key in ["APPEARANCE(\"appearance\"", "READING(\"reading\"", "HOME(\"home\"",
+            "PRAYER(\"prayer\"", "AUDIO(\"audio\"", "NOTIFICATIONS(\"notifications\"",
+            "DATA(\"data\"", "LANGUAGE(\"language\"", "SUPPORT(\"support\"", "ABOUT(\"about\""]),
+        "the settings hub has ten category destinations and internal back navigation")
 require("settings_developer_panel_row" not in settings and "settings_developer_name_row" not in settings
         and "settings_about_developer_row" not in settings,
         "the hidden developer panel has no public settings row")
@@ -213,8 +214,9 @@ require("verifyAndUnlock" not in (ROOT / "app/src/main/java/com/example/ui/scree
         and "DEFAULT_ACCESS_CODE" not in (ROOT / "app/src/main/java/com/example/ui/screens/DeveloperAccessController.kt").read_text(encoding="utf-8"),
         "no hard-coded developer password or local PIN verifier is shipped")
 require("SettingsActionTile" in settings and "SettingsSwitchTile" in settings
+        and "SettingsCategoryTile" in settings
         and "heightIn(min = SettingsRowMinHeight)" in (ROOT / "app/src/main/java/com/example/ui/components/SettingsComponents.kt").read_text(encoding="utf-8"),
-        "every settings option uses a shared, accessible row component")
+        "the settings dashboard and options use shared accessible components")
 require("will compet" not in shell and "nav_tab_home" in shell and "bottom_navigation_bar" in shell,
         "the bottom navigation keeps its tabs and exposes a test tag")
 require("PrayerTimesStrip" in (ROOT / "app/src/main/java/com/example/ui/screens/HomeScreen.kt").read_text(encoding="utf-8")

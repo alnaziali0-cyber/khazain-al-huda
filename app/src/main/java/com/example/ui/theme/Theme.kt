@@ -59,7 +59,7 @@ private fun darkSchemeFor(choice: AccentChoice): androidx.compose.material3.Colo
         onTertiary = Color(0xFF211A0E),
         tertiaryContainer = Color(0xFF3C321F),
         onTertiaryContainer = Color(0xFFF3E6C7),
-        // "Soft black": a near-black with a green-teal hint rather than a dead #000000 slab.
+        // Matte neutral black, with slightly lifted panels for comfortable separation.
         background = AppSoftBlackBackground,
         onBackground = NightLightText,
         surface = NightGlassSurface,
@@ -67,7 +67,7 @@ private fun darkSchemeFor(choice: AccentChoice): androidx.compose.material3.Colo
         surfaceVariant = NightSurfaceVariant,
         onSurfaceVariant = NightMutedText,
         outline = SubtleGlassBorderDark,
-        outlineVariant = Color(0xFF2B3530),
+        outlineVariant = SubtleGlassBorderDark,
         error = StatusErrorDark,
         onError = Color(0xFF3A1A19),
         errorContainer = StatusErrorContainerDark,

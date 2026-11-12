@@ -72,6 +72,12 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.EventAvailable
+import androidx.compose.material.icons.outlined.AccessAlarm
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.SupportAgent
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.outlined.VerifiedUser
@@ -121,6 +127,7 @@ import com.example.media.AdhanAudioStorage
 import com.example.media.AdhanPlaybackService
 import com.example.ui.components.GlassFilterChip
 import com.example.ui.components.SettingsActionTile
+import com.example.ui.components.SettingsCategoryTile
 import com.example.ui.components.SettingsRowDivider
 import com.example.ui.components.SettingsSectionCard
 import com.example.ui.components.SettingsSwitchTile
@@ -141,13 +148,11 @@ import kotlin.math.roundToInt
 const val APP_DEVELOPER_NAME = "علي اديب العنزي"
 
 /**
- * The settings hub, rebuilt as a set of clearly titled sections.
+ * Settings hub rebuilt as a ten-category dashboard with focused category pages.
  *
- * Every option is a button-like row that shows an icon, an Arabic title, a short description and
- * the current value of the setting. Binary options use a switch, everything else shows a chevron
- * that indicates a sub-page. Nothing that used to work has been removed: the previous behaviour
- * (dialogs, sliders, per-prayer alerts, the cache manager, the support forms, the reset scopes and
- * the delete confirmation) is preserved, only the presentation changed.
+ * Existing callbacks, preference keys, dialogs, sliders, per-prayer alerts, cache actions,
+ * support forms, reset scopes and delete confirmations are retained. The old long-list layout
+ * is replaced without clearing or renaming stored user preferences.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -183,7 +188,6 @@ fun SettingsScreen(
     onRefreshPrayerTimes: () -> Unit,
     onOpenDeveloperPanel: () -> Unit
 ) {
-    BackHandler { onBack() }
     val context = LocalContext.current
     val statusColors = LocalStatusColors.current
     val currentGov = IraqGovernorates.byId(settings.governorateId)
@@ -207,6 +211,16 @@ fun SettingsScreen(
     var supportAttachment by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingResetScope by rememberSaveable { mutableStateOf<SettingsResetScope?>(null) }
     var notificationMessage by remember { mutableStateOf<String?>(null) }
+    var selectedCategoryKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedCategory = SettingsCategory.entries.firstOrNull { it.key == selectedCategoryKey }
+
+    BackHandler {
+        if (selectedCategoryKey != null) {
+            selectedCategoryKey = null
+        } else {
+            onBack()
+        }
+    }
 
     // Seven deliberate taps reveal the private Firebase sign-in route; no local access code exists.
     var versionTapCount by remember { mutableIntStateOf(0) }
@@ -233,29 +247,56 @@ fun SettingsScreen(
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // ---------------- ترويسة الشاشة ----------------
+        // The settings hub is a category dashboard. Each category opens a focused sub-screen.
         item {
             SettingsHeaderBar(
-                title = "الإعدادات",
-                subtitle = "كل خيار هنا مطبَّق فوراً ويُحفظ على جهازك",
-                onBack = onBack
+                title = selectedCategory?.title ?: "الإعدادات",
+                subtitle = selectedCategory?.description
+                    ?: "رتّب تجربتك واختر ما يناسب طريقة استخدامك لخزائن الهدى",
+                onBack = {
+                    if (selectedCategoryKey != null) selectedCategoryKey = null else onBack()
+                }
             )
         }
 
-        // ---------------- هوية التطبيق ----------------
-        item {
-            AppIdentityCard(
-                versionName = BuildConfig.VERSION_NAME,
-                versionCode = BuildConfig.VERSION_CODE
-            )
+        if (selectedCategoryKey == null) {
+            item {
+                AppIdentityCard(
+                    versionName = BuildConfig.VERSION_NAME,
+                    versionCode = BuildConfig.VERSION_CODE
+                )
+            }
+            item {
+                SettingsDashboardIntro()
+            }
+            item {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    maxItemsInEachRow = 2,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SettingsCategory.entries.forEach { category ->
+                        SettingsCategoryTile(
+                            title = category.title,
+                            description = category.tileDescription,
+                            icon = category.icon,
+                            modifier = Modifier.weight(1f),
+                            testTag = "settings_category_${category.key}",
+                            onClick = { selectedCategoryKey = category.key }
+                        )
+                    }
+                }
+            }
         }
 
         // ---------------- 1. إعدادات المظهر ----------------
+        if (selectedCategoryKey == SettingsCategory.APPEARANCE.key) {
         item {
             SettingsSectionCard(
                 title = "إعدادات المظهر",
                 icon = Icons.Outlined.Palette,
-                description = "الوضع الليلي، لون الواجهة، الخط وحجم النص"
+                description = "الوضع الداكن، ألوان الواجهة، الخط وحجم النص"
             ) {
                 Column {
                     Text(
@@ -279,7 +320,7 @@ fun SettingsScreen(
 
                     SettingsActionTile(
                         title = "الوضع الداكن",
-                        description = "أسود خفيف مريح للعين بدل الأسود التام",
+                        description = "مظهر أسود فحمي عميق مع أسطح داكنة واضحة",
                         icon = Icons.Outlined.DarkMode,
                         value = if (settings.themeMode == ThemeMode.DARK) "مُفعَّل" else "حسب النظام",
                         onClick = {
@@ -383,7 +424,10 @@ fun SettingsScreen(
             }
         }
 
+                }
+
         // ---------------- 2. إعدادات القراءة ----------------
+        if (selectedCategoryKey == SettingsCategory.READING.key) {
         item {
             SettingsSectionCard(
                 title = "إعدادات القراءة",
@@ -494,7 +538,10 @@ fun SettingsScreen(
             }
         }
 
+                }
+
         // ---------------- 3. المتابعة اليومية في الرئيسية ----------------
+        if (selectedCategoryKey == SettingsCategory.HOME.key) {
         item {
             SettingsSectionCard(
                 title = "المتابعة اليومية في الرئيسية",
@@ -536,7 +583,10 @@ fun SettingsScreen(
             }
         }
 
+                }
+
         // ---------------- 4. إعدادات مواقيت الصلاة ----------------
+        if (selectedCategoryKey == SettingsCategory.PRAYER.key) {
         item {
             SettingsSectionCard(
                 title = "إعدادات مواقيت الصلاة",
@@ -684,7 +734,10 @@ fun SettingsScreen(
             }
         }
 
+                }
+
         // ---------------- 4. إعدادات الصوت ----------------
+        if (selectedCategoryKey == SettingsCategory.AUDIO.key) {
         item {
             SettingsSectionCard(
                 title = "إعدادات الصوت",
@@ -772,7 +825,10 @@ fun SettingsScreen(
             }
         }
 
+                }
+
         // ---------------- 5. إعدادات الإشعارات ----------------
+        if (selectedCategoryKey == SettingsCategory.NOTIFICATIONS.key) {
         item {
             SettingsSectionCard(
                 title = "إعدادات الإشعارات",
@@ -1001,7 +1057,10 @@ fun SettingsScreen(
             }
         }
 
+                }
+
         // ---------------- 6. إعدادات البيانات والمزامنة ----------------
+        if (selectedCategoryKey == SettingsCategory.DATA.key) {
         item {
             SettingsSectionCard(
                 title = "إعدادات البيانات والمزامنة",
@@ -1070,7 +1129,10 @@ fun SettingsScreen(
             }
         }
 
+                }
+
         // ---------------- 7. إعدادات اللغة ----------------
+        if (selectedCategoryKey == SettingsCategory.LANGUAGE.key) {
         item {
             SettingsSectionCard(
                 title = "إعدادات اللغة",
@@ -1102,7 +1164,10 @@ fun SettingsScreen(
             }
         }
 
+                }
+
         // ---------------- 9. الدعم والمساعدة ----------------
+        if (selectedCategoryKey == SettingsCategory.SUPPORT.key) {
         item {
             SettingsSectionCard(
                 title = "الدعم والمساعدة",
@@ -1192,7 +1257,10 @@ fun SettingsScreen(
             }
         }
 
+                }
+
         // ---------------- 10. حول التطبيق ----------------
+        if (selectedCategoryKey == SettingsCategory.ABOUT.key) {
         item {
             SettingsSectionCard(
                 title = "حول التطبيق",
@@ -1296,6 +1364,8 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+
         }
 
         notificationMessage?.let { message ->
@@ -1729,53 +1799,90 @@ private fun SettingsHeaderBar(
     subtitle: String,
     onBack: () -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 5.dp, bottom = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        Surface(
+            onClick = onBack,
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.size(46.dp).testTag("settings_back_button")
         ) {
-            Surface(
-                onClick = onBack,
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                modifier = Modifier
-                    .size(42.dp)
-                    .testTag("settings_back_button")
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = "رجوع",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(21.dp)
-                    )
-                }
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = "رجوع",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(21.dp)
                 )
             }
         }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
+        }
     }
+}
+
+@Composable
+private fun SettingsDashboardIntro() {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.56f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                text = "مساحة تحكّمك الشخصية",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+                text = "اختر تصنيفاً لفتح إعداداته بصورة مستقلة ومنظمة. تغييراتك تُحفظ وفق آلية التطبيق الحالية.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
+            )
+        }
+    }
+}
+
+private enum class SettingsCategory(
+    val key: String,
+    val title: String,
+    val description: String,
+    val tileDescription: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    APPEARANCE("appearance", "المظهر والتخصيص", "تحكّم في ألوان التطبيق وهيئته وخطوط الواجهة", "الوضع الداكن، الألوان، الخط والحجم", Icons.Outlined.Tune),
+    READING("reading", "القراءة والقرآن", "اضبط تجربة قراءة القرآن والنصوص الطويلة", "خط القراءة، التباعد، عرض المصحف", Icons.AutoMirrored.Outlined.MenuBook),
+    HOME("home", "الرئيسية والمتابعة", "اختر مؤشرات المتابعة التي تظهر في الصفحة الرئيسية", "الأهداف اليومية ومؤشرات الإنجاز", Icons.Outlined.EventAvailable),
+    PRAYER("prayer", "الصلاة والمواقيت", "المحافظة والتاريخ الهجري وتنبيهات الصلاة", "المحافظة، المواقيت، الأذان", Icons.Outlined.AccessAlarm),
+    AUDIO("audio", "الصوتيات والتلاوة", "إعداد القارئ والأذان وسرعة التشغيل", "القارئ، الصوت، سرعة التشغيل", Icons.Outlined.LibraryMusic),
+    NOTIFICATIONS("notifications", "الإشعارات والتنبيهات", "خصّص التنبيهات وأوقاتها لكل صلاة", "التذكيرات، الهدوء، اختبار الإشعار", Icons.Outlined.Notifications),
+    DATA("data", "البيانات والتخزين", "إدارة المزامنة والنسخ والكاش والبيانات المحلية", "المزامنة، التخزين، إدارة البيانات", Icons.Outlined.FolderOpen),
+    LANGUAGE("language", "اللغة والعرض", "خيارات اللغة واتجاه واجهة التطبيق", "العربية وخيارات اللغة المتاحة", Icons.Outlined.Language),
+    SUPPORT("support", "الدعم والمساعدة", "تواصل مع فريق الدعم واطلع على المساعدة", "التواصل، الأسئلة الشائعة، البلاغات", Icons.Outlined.SupportAgent),
+    ABOUT("about", "حول خزائن الهدى", "معلومات التطبيق والإصدار والمصادر والتراخيص", "الإصدار، الخصوصية، المصادر", Icons.Outlined.Info)
 }
 
 /** The identity card at the top of the settings screen: the logo, the name and the version. */
@@ -1785,18 +1892,18 @@ private fun AppIdentityCard(
     versionCode: Int
 ) {
     Surface(
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(
             1.dp,
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+            MaterialTheme.colorScheme.outlineVariant
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1813,7 +1920,7 @@ private fun AppIdentityCard(
                     contentDescription = "الشعار الرسمي لخزائن الهدى",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .size(58.dp)
+                        .size(50.dp)
                         .padding(4.dp)
                 )
             }

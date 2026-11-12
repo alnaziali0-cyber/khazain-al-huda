@@ -18,12 +18,12 @@ class DesignSystemPaletteTest {
     }
 
     @Test
-    fun `dark palette uses charcoal rather than blue gray or pure black`() {
-        assertEquals(Color(0xFF101312), AppSoftBlackBackground)
-        assertEquals(Color(0xFF1B211E), NightGlassSurface)
-        assertEquals(Color(0xFF202824), NightSurfaceVariant)
-        assertEquals(Color(0xFF171D1A), NightInputSurface)
-        assertEquals(Color(0xFF2B3530), SubtleGlassBorderDark)
+    fun `dark palette uses a matte black base and lifted neutral panels`() {
+        assertEquals(Color(0xFF0B0D0C), AppSoftBlackBackground)
+        assertEquals(Color(0xFF151918), NightGlassSurface)
+        assertEquals(Color(0xFF1D2220), NightSurfaceVariant)
+        assertEquals(Color(0xFF111514), NightInputSurface)
+        assertEquals(Color(0xFF303734), SubtleGlassBorderDark)
         assertEquals(Color(0xFF4D9A8C), TurquoisePrimaryDark)
         assertEquals(Color(0xFF8BC8B8), TurquoiseSecondaryDark)
         assertEquals(Color(0xFFC6A15B), NightGoldAccent)
