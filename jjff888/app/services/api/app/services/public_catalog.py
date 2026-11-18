@@ -29,6 +29,7 @@ from app.models import (
 
 
 REUSABLE_RIGHTS_STATUSES = frozenset({"licensed", "public_domain", "permission_granted"})
+CLEARED_PUBLIC_SECTIONS = frozenset({"book", "hadith", "dua", "visit"})
 CATALOG_TYPES = frozenset({"book", "hadith", "dua", "visit", "event", "ethics_lesson", "audio"})
 
 
@@ -66,6 +67,11 @@ def list_catalog(
     """Return public catalog rows after explicit publication/provenance checks."""
     if catalog_type not in CATALOG_TYPES:
         raise HTTPException(status_code=404, detail="Catalog section not found")
+    # These legacy text sections were intentionally cleared from the app. Keep
+    # their API category identifiers stable, but never republish retained legacy
+    # database rows to the mobile client.
+    if catalog_type in CLEARED_PUBLIC_SECTIONS:
+        return _page_result([], 0, limit, offset)
     pattern = _search_pattern(search)
 
     if catalog_type == "book":

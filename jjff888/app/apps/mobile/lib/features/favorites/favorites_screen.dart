@@ -40,7 +40,7 @@ class FavoritesScreen extends ConsumerWidget {
                     Text('لا توجد مواد محفوظة في المفضلة بعد.', textAlign: TextAlign.center),
                     SizedBox(height: 6),
                     Text(
-                      'يمكنك حفظ الكتب والروايات والأدعية والزيارات والمناسبات والدروس والصوتيات الموثقة من صفحاتها.',
+                      'يمكنك حفظ الآيات والمناسبات والدروس والصوتيات المتاحة من صفحاتها.',
                       textAlign: TextAlign.center,
                     ),
                   ],

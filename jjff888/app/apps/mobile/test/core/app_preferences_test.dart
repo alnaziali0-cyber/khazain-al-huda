@@ -73,9 +73,15 @@ void main() {
       ]);
     });
 
-    test('offline-content selection keeps reading positions and tasbih state', () {
+    test('offline-content selection protects Quran and retained app data', () {
       final keys = [
         'catalog_cache_book',
+        'catalog_cache_book_الفهرس',
+        'catalog_cache_hadith',
+        'catalog_cache_dua_search',
+        'catalog_cache_visit_زيارة',
+        'catalog_cache_quran',
+        'catalog_cache_event',
         'book_pages_v2_3_1_0_0',
         'book_page_v2_3_1_5',
         'book_pages_7_1_0_0',
@@ -88,12 +94,18 @@ void main() {
 
       expect(selected, containsAll([
         'catalog_cache_book',
+        'catalog_cache_book_الفهرس',
+        'catalog_cache_hadith',
+        'catalog_cache_dua_search',
+        'catalog_cache_visit_زيارة',
         'book_pages_v2_3_1_0_0',
         'book_page_v2_3_1_5',
         'book_pages_7_1_0_0',
-        'governorates_catalog_cache_v1',
         'favorite_entries_cache',
       ]));
+      expect(selected, isNot(contains('catalog_cache_quran')));
+      expect(selected, isNot(contains('catalog_cache_event')));
+      expect(selected, isNot(contains('governorates_catalog_cache_v1')));
       expect(selected, isNot(contains('book_progress_local_3')));
       expect(selected, isNot(contains('tasbih_count')));
     });

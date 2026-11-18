@@ -16,6 +16,8 @@ dependencies:
   dio: ^5.8.0+1
   shared_preferences: ^2.5.3
   just_audio: ^0.9.46
+  audio_service: ^0.18.19
+  audio_session: ^0.1.25
   path_provider: ^2.1.5
   pdfrx: 1.0.103
   share_plus: ^10.1.4
@@ -42,11 +44,12 @@ flutter:
     - assets/branding/khazain_logo.jpg
     - assets/data/wallpapers.json
     - assets/images/wallpapers/
-    - assets/data/visits/catalog.json
-    - assets/data/visits/outlines/
-    - assets/data/visits/transcribed/
+    - assets/data/prayer_times/
+    - assets/data/shia_occasions_hijri.json
+    - assets/data/ahl_al_bayt_biographies.json
     - assets/data/iraq_governorates.json
     - assets/data/quran/
+    - assets/data/library/
   fonts:
     - family: NotoNaskhArabicUI
       fonts:

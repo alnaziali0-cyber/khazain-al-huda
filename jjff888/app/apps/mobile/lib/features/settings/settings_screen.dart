@@ -131,7 +131,7 @@ class SettingsScreen extends ConsumerWidget {
                   SettingsTile(
                     icon: Icons.menu_book_outlined,
                     title: 'المكتبة الإسلامية',
-                    subtitle: 'الكتب والمراجع المتاحة والموثقة',
+                    subtitle: 'القسم محفوظ دون ملفات كتب أو نصوص حالياً',
                     onTap: () => context.go('/library'),
                   ),
                   SettingsTile(
@@ -143,7 +143,7 @@ class SettingsScreen extends ConsumerWidget {
                   SettingsTile(
                     icon: Icons.favorite_border_rounded,
                     title: 'المفضلة',
-                    subtitle: 'الكتب والمواد التي حفظتها',
+                    subtitle: 'المواد المتاحة التي حفظتها على هذا الجهاز',
                     onTap: () => context.push('/favorites'),
                   ),
                   SettingsTile(

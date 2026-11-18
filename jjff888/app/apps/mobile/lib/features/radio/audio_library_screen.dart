@@ -1,214 +1,306 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
+import 'package:audio_service/audio_service.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
-import '../../core/quran_audio_service.dart';
+import '../../core/audio_playback_service.dart';
+import '../../core/providers.dart';
 
-typedef LocalAudioLoader = Future<List<LocalQuranAudio>> Function();
+typedef AudioTrackLoader = Future<List<Map<String, dynamic>>> Function();
 
-class AudioLibraryScreen extends StatefulWidget {
-  const AudioLibraryScreen({super.key, this.loadLocalAudio});
+class AudioLibraryScreen extends ConsumerStatefulWidget {
+  const AudioLibraryScreen({super.key, this.loadTracks, this.playback});
 
-  /// Injection seam for tests; production reads only files already on device.
-  final LocalAudioLoader? loadLocalAudio;
+  final AudioTrackLoader? loadTracks;
+  final AppAudioPlayback? playback;
 
   @override
-  State<AudioLibraryScreen> createState() => _AudioLibraryScreenState();
+  ConsumerState<AudioLibraryScreen> createState() => _AudioLibraryScreenState();
 }
 
-class _AudioLibraryScreenState extends State<AudioLibraryScreen> {
-  late Future<List<LocalQuranAudio>> _files;
-  AudioPlayer? _player;
-  StreamSubscription<PlayerState>? _playerStateSubscription;
-  int? _playingSurah;
+class _AudioLibraryScreenState extends ConsumerState<AudioLibraryScreen> {
+  static const _categories = <({String id, String title, IconData icon})>[
+    (id: 'all', title: 'الكل', icon: Icons.library_music_rounded),
+    (id: 'quran', title: 'القرآن', icon: Icons.menu_book_rounded),
+    (id: 'adhan', title: 'الأذان', icon: Icons.mosque_rounded),
+    (id: 'hussainiyat', title: 'الحسينيات', icon: Icons.flag_rounded),
+    (id: 'duas', title: 'الأدعية', icon: Icons.volunteer_activism_rounded),
+    (id: 'ziyara', title: 'الزيارات', icon: Icons.location_on_rounded),
+    (id: 'lectures', title: 'المجالس والمحاضرات', icon: Icons.record_voice_over_rounded),
+    (id: 'radio', title: 'الإذاعات', icon: Icons.radio_rounded),
+  ];
+
+  late Future<List<Map<String, dynamic>>> _tracks;
+  late Future<List<Map<String, dynamic>>> _quranSurahs;
+  late final AppAudioPlayback _playback;
+  StreamSubscription<PlaybackState>? _playerSubscription;
+  String _selectedCategory = 'all';
+  int? _playingId;
+  bool _isPlaying = false;
+  String? _status;
 
   @override
   void initState() {
     super.initState();
-    _files = _loadLocalAudio();
+    _tracks = _loadTracks();
+    _quranSurahs = _loadQuranSurahs();
+    _playback = widget.playback ?? ref.read(appAudioPlaybackProvider);
+    _playerSubscription = _playback.playbackStateStream.listen((state) {
+      if (!mounted) return;
+      setState(() {
+        _isPlaying = state.playing;
+        if (state.processingState == AudioProcessingState.completed) {
+          _playingId = null;
+          _isPlaying = false;
+        }
+      });
+    });
   }
-
-  Future<List<LocalQuranAudio>> _loadLocalAudio() =>
-      widget.loadLocalAudio?.call() ?? QuranAudioService().listExistingSurahFiles();
 
   @override
   void dispose() {
-    _playerStateSubscription?.cancel();
-    _player?.dispose();
+    _playerSubscription?.cancel();
     super.dispose();
   }
 
-  Future<void> _play(LocalQuranAudio audio) async {
-    final player = _player ??= AudioPlayer();
-    if (_playingSurah == audio.surahNumber && player.playing) {
-      await player.pause();
-      if (mounted) setState(() => _playingSurah = null);
-      return;
-    }
+  Future<List<Map<String, dynamic>>> _loadQuranSurahs() async {
+    final raw = await rootBundle.loadString('assets/data/quran/audio_surahs_manifest.json');
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    final items = decoded['items'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _loadTracks() async {
+    if (widget.loadTracks != null) return widget.loadTracks!();
+    final response = await ref.read(apiProvider).get<Map<String, dynamic>>(
+          '/api/v1/public/catalog/audio',
+          queryParameters: {'limit': 100, 'offset': 0},
+        );
+    final raw = response.data?['items'];
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+
+  List<Map<String, dynamic>> _filter(List<Map<String, dynamic>> tracks) {
+    if (_selectedCategory == 'all') return tracks;
+    return tracks.where((track) => _normaliseCategory(track['category']) == _selectedCategory).toList();
+  }
+
+  String _normaliseCategory(Object? value) {
+    final category = (value ?? '').toString().toLowerCase().trim();
+    if (['quran', 'quran_recitation', 'tilawa'].contains(category)) return 'quran';
+    if (['adhan', 'azan'].contains(category)) return 'adhan';
+    if (['hussainiyat', 'latmiyat', 'nohay', 'qasida', 'mourning'].contains(category)) return 'hussainiyat';
+    if (['dua', 'duas', 'munajat'].contains(category)) return 'duas';
+    if (['ziyara', 'ziyarat', 'visit'].contains(category)) return 'ziyara';
+    if (['lecture', 'lectures', 'majlis', 'majalis'].contains(category)) return 'lectures';
+    if (category == 'radio') return 'radio';
+    return category;
+  }
+
+  Future<void> _play(Map<String, dynamic> track) async {
+    final id = track['id'] as int?;
+    final url = track['source_url'] as String?;
+    if (id == null || url == null || Uri.tryParse(url)?.scheme != 'https') return;
     try {
-      await player.setAudioSource(AudioSource.file(audio.file.path));
+      if (_playingId == id) {
+        if (_playback.isPlaying) {
+          await _playback.pause();
+        } else {
+          await _playback.play();
+        }
+        return;
+      }
+      final title = (track['title'] ?? 'تسجيل صوتي').toString();
+      await _playback.playRemote(
+        uri: Uri.parse(url),
+        id: id.toString(),
+        title: title,
+        artist: (track['reciter'] ?? 'خزائن الهدى').toString(),
+        album: 'المكتبة الصوتية',
+      );
       if (!mounted) return;
-      setState(() => _playingSurah = audio.surahNumber);
-      _playerStateSubscription ??= player.playerStateStream.listen((state) {
-        if (state.processingState == ProcessingState.completed && mounted) {
-          setState(() => _playingSurah = null);
-        }
-      });
-      unawaited(player.play().catchError((Object _) {
-        if (mounted) {
-          setState(() => _playingSurah = null);
-          _showMessage('تعذر تشغيل الملف الصوتي المحلي.');
-        }
-      }));
+      setState(() => _playingId = id);
     } catch (_) {
-      if (mounted) _showMessage('تعذر تشغيل الملف الصوتي المحلي.');
+      _message('تعذر تشغيل التسجيل. تحقق من الاتصال ومصدر الصوت.');
     }
   }
 
-  void _showMessage(String message) {
+  Future<void> _download(Map<String, dynamic> track) async {
+    final id = track['id'] as int?;
+    final url = track['download_url'] as String?;
+    if (id == null || track['can_download'] != true || url == null || Uri.tryParse(url)?.scheme != 'https') {
+      _message('هذا التسجيل غير مرخص للتنزيل.');
+      return;
+    }
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final audioDirectory = Directory('${directory.path}/licensed_audio');
+      await audioDirectory.create(recursive: true);
+      final extension = _extensionFor(track['mime_type']?.toString());
+      final file = File('${audioDirectory.path}/track_$id$extension');
+      await ref.read(apiProvider).download(url, file.path,
+          options: Options(receiveTimeout: const Duration(minutes: 5)));
+      if (!mounted) return;
+      _message('تم تنزيل التسجيل المصرح به للاستماع دون اتصال.');
+    } catch (_) {
+      _message('تعذر تنزيل التسجيل حالياً.');
+    }
+  }
+
+  String _extensionFor(String? mime) => switch (mime) {
+        'audio/mp4' => '.m4a',
+        'audio/aac' => '.aac',
+        'audio/ogg' => '.ogg',
+        'audio/wav' => '.wav',
+        'audio/flac' => '.flac',
+        _ => '.mp3',
+      };
+
+  void _message(String value) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: Text(value)));
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: accent.withOpacity(.12),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Icon(Icons.headphones_rounded, color: accent, size: 27),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('مكتبة الصوتيات',
-                        style: theme.textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w900)),
-                    Text('ملفات محفوظة على هذا الجهاز فقط',
-                        style: theme.textTheme.bodySmall),
-                  ],
-                ),
-              ),
-            ],
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _tracks,
+      builder: (context, snapshot) {
+        final allTracks = snapshot.data ?? const <Map<String, dynamic>>[];
+        final visibleTracks = _filter(allTracks);
+        return Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+            child: Row(children: [
+              Icon(Icons.headphones_rounded, color: theme.colorScheme.primary, size: 30),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('المكتبة الصوتية', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                Text('تسجيلات منشورة بعد التحقق من حقوقها', style: theme.textTheme.bodySmall),
+              ])),
+              IconButton(onPressed: () => setState(() => _tracks = _loadTracks()), icon: const Icon(Icons.refresh_rounded), tooltip: 'تحديث'),
+            ]),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Card(
-            color: theme.colorScheme.primaryContainer.withOpacity(.45),
-            child: const Padding(
-              padding: EdgeInsets.all(13),
-              child: Text(
-                'تعرض هذه المكتبة الملفات الصوتية المحلية الموجودة مسبقاً فقط. لا تفتح مواقع خارجية ولا تبث أو تنزّل صوتاً من الإنترنت.',
-                style: TextStyle(height: 1.55),
-              ),
-            ),
-          ),
-        ),
-        Expanded(
-          child: FutureBuilder<List<LocalQuranAudio>>(
-            future: _files,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
-                return _LocalAudioMessage(
-                  message: 'تعذر فحص الملفات الصوتية المحفوظة على هذا الجهاز.',
-                  onRetry: () => setState(() => _files = _loadLocalAudio()),
-                );
-              }
-              final files = snapshot.data ?? const <LocalQuranAudio>[];
-              if (files.isEmpty) {
-                return _LocalAudioMessage(
-                  message: 'لا تتوفر حالياً ملفات تلاوة محلية محفوظة. لم نضف روابط أو ملفات غير مثبتة الحقوق.',
-                  action: FilledButton.tonalIcon(
-                    onPressed: () => context.go('/quran'),
-                    icon: const Icon(Icons.menu_book_rounded),
-                    label: const Text('فتح المصحف'),
-                  ),
-                );
-              }
-              return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(14, 4, 14, 18),
-                itemCount: files.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 6),
-                itemBuilder: (context, index) {
-                  final audio = files[index];
-                  final isPlaying = _playingSurah == audio.surahNumber;
-                  return Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.music_note_rounded),
-                      title: Text('تلاوة محفوظة · السورة ${audio.surahNumber}',
-                          style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: const Text('ملف محلي على هذا الجهاز'),
-                      trailing: IconButton(
-                        tooltip: isPlaying ? 'إيقاف مؤقت' : 'تشغيل الملف المحلي',
-                        onPressed: () => _play(audio),
-                        icon: Icon(isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded),
-                      ),
-                    ),
-                  );
-                },
+          SizedBox(height: 48, child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            scrollDirection: Axis.horizontal,
+            itemCount: _categories.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final category = _categories[index];
+              final selected = _selectedCategory == category.id;
+              return ChoiceChip(
+                selected: selected,
+                avatar: Icon(category.icon, size: 17),
+                label: Text(category.title),
+                onSelected: (_) => setState(() => _selectedCategory = category.id),
               );
             },
-          ),
-        ),
-      ],
+          )),
+          const SizedBox(height: 8),
+          Expanded(child: Builder(builder: (context) {
+            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+            if (snapshot.hasError) return _empty('تعذر الاتصال بمكتبة الصوتيات. تحقق من إعداد API_BASE_URL ثم أعد المحاولة.');
+            if (visibleTracks.isEmpty && _selectedCategory == 'quran') {
+              return _buildQuranSurahIndex();
+            }
+            if (visibleTracks.isEmpty) {
+              final categoryTitle = _categories.firstWhere((item) => item.id == _selectedCategory).title;
+              return _empty(_selectedCategory == 'all'
+                  ? 'المكتبة جاهزة لاستقبال التسجيلات. ستظهر هنا فقط الملفات التي وثّق المشرف حقوق بثها.'
+                  : 'لا توجد تسجيلات منشورة ومرخصة في قسم $categoryTitle حالياً.');
+            }
+            return ListView.separated(
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
+              itemCount: visibleTracks.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 7),
+              itemBuilder: (context, index) {
+                final track = visibleTracks[index];
+                final id = track['id'] as int?;
+                final playing = id != null && id == _playingId && _isPlaying;
+                final canDownload = track['can_download'] == true && track['download_url'] is String;
+                return Card(child: ListTile(
+                  leading: CircleAvatar(child: Icon(playing ? Icons.graphic_eq_rounded : Icons.music_note_rounded)),
+                  title: Text((track['title'] ?? 'تسجيل صوتي').toString(), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: Text([
+                    if ((track['reciter'] ?? '').toString().isNotEmpty) track['reciter'].toString(),
+                    if ((track['category'] ?? '').toString().isNotEmpty) track['category'].toString(),
+                    if (track['duration_seconds'] is int) _duration(track['duration_seconds'] as int),
+                  ].join(' · ')),
+                  trailing: Wrap(spacing: 0, children: [
+                    IconButton(tooltip: playing ? 'إيقاف مؤقت' : 'تشغيل', onPressed: () => _play(track), icon: Icon(playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded, size: 30)),
+                    if (canDownload) IconButton(tooltip: 'تنزيل مرخص', onPressed: () => _download(track), icon: const Icon(Icons.download_rounded)),
+                  ]),
+                ));
+              },
+            );
+          })),
+          if (_playingId != null)
+            SafeArea(top: false, child: Material(color: theme.colorScheme.surfaceContainerHighest, child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(children: [
+                const Icon(Icons.equalizer_rounded),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('يُشغّل الآن', style: TextStyle(fontWeight: FontWeight.w700))),
+                IconButton(onPressed: () => _isPlaying ? _playback.pause() : _playback.play(), icon: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded)),
+                IconButton(onPressed: () async { await _playback.stop(); if (mounted) setState(() => _playingId = null); }, icon: const Icon(Icons.close_rounded)),
+              ]),
+            )))
+        ]);
+      },
     );
   }
-}
 
-class _LocalAudioMessage extends StatelessWidget {
-  const _LocalAudioMessage({required this.message, this.action, this.onRetry});
-
-  final String message;
-  final Widget? action;
-  final VoidCallback? onRetry;
-
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.library_music_outlined, size: 42),
-              const SizedBox(height: 12),
-              Text(message, textAlign: TextAlign.center),
-              if (action != null) ...[
-                const SizedBox(height: 14),
-                action!,
-              ],
-              if (onRetry != null) ...[
-                const SizedBox(height: 10),
-                TextButton.icon(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('إعادة الفحص'),
+  Widget _buildQuranSurahIndex() => FutureBuilder<List<Map<String, dynamic>>>(
+        future: _quranSurahs,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError || snapshot.data == null) {
+            return _empty('تعذر تحميل فهرس السور.');
+          }
+          final surahs = snapshot.data!;
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
+            itemCount: surahs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 5),
+            itemBuilder: (context, index) {
+              final surah = surahs[index];
+              final number = surah['number'];
+              final name = (surah['name_ar'] ?? '').toString();
+              return Card(
+                child: ListTile(
+                  leading: CircleAvatar(child: Text('$number')),
+                  title: Text('سورة $name', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: Text('${surah['ayah_count']} آية · التلاوة بانتظار تسجيل مرخص'),
+                  trailing: const Icon(Icons.lock_clock_outlined),
                 ),
-              ],
-            ],
-          ),
-        ),
+              );
+            },
+          );
+        },
       );
+
+  Widget _empty(String message) => Center(child: Padding(
+    padding: const EdgeInsets.all(28),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.library_music_outlined, size: 46),
+      const SizedBox(height: 14),
+      Text(message, textAlign: TextAlign.center, style: const TextStyle(height: 1.6)),
+    ]),
+  ));
+
+  String _duration(int seconds) => '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 }

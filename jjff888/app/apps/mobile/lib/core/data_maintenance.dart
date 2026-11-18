@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -6,9 +8,8 @@ import 'providers.dart';
 
 /// Local data controls exposed in the privacy settings.
 ///
-/// Only keys written by this app are matched. Calculation method, governorate,
-/// favorites identity, tasbih counters and book reading positions are never
-/// removed here.
+/// Only cache keys for the four cleared text sections are matched. Quran,
+/// prayer, location, event, tasbih, and remaining favorite data are preserved.
 class DataMaintenance {
   DataMaintenance(this._prefs, this._coordinatesStore);
 
@@ -23,15 +24,23 @@ class DataMaintenance {
     'prayer_misr_',
   ];
 
-  // Offline copies of catalogs, book pages and favorites (current and legacy formats).
+  // Only the sections cleared by the content-cleanup operation are matched.
+  // Quran catalogs, governorate data, event data, and other retained caches stay.
   static const _offlineCachePrefixes = [
-    'catalog_cache_',
+    'catalog_cache_book_',
+    'catalog_cache_hadith_',
+    'catalog_cache_dua_',
+    'catalog_cache_visit_',
     'book_pages_',
-    'book_page_v2_'
+    'book_page_v2_',
   ];
   static const _offlineCacheExactKeys = [
-    'governorates_catalog_cache_v1',
-    'favorite_entries_cache'
+    'catalog_cache_book',
+    'catalog_cache_hadith',
+    'catalog_cache_dua',
+    'catalog_cache_visit',
+    // This key is returned for selective filtering, never removed wholesale.
+    'favorite_entries_cache',
   ];
 
   /// Pure selection helper, kept public for unit tests.
@@ -81,10 +90,34 @@ class DataMaintenance {
   /// Returns the number of offline content entries removed.
   Future<int> clearOfflineContent() async {
     final keys = offlineCacheKeys(_prefs.getKeys());
-    for (final key in keys) {
+    var removed = 0;
+    for (final key in keys.where((key) => key != 'favorite_entries_cache')) {
       await _prefs.remove(key);
+      removed++;
     }
-    return keys.length;
+
+    // Keep Quran and retained-section favorites in the same cache.
+    final favoriteCache = _prefs.getString('favorite_entries_cache');
+    if (favoriteCache != null) {
+      try {
+        final decoded = jsonDecode(favoriteCache);
+        if (decoded is List) {
+          final retained = decoded.where((item) {
+            if (item is! Map) return true;
+            return !const {'book', 'hadith', 'dua', 'visit'}
+                .contains(item['entity_type']?.toString());
+          }).toList(growable: false);
+          removed += decoded.length - retained.length;
+          if (retained.length != decoded.length) {
+            await _prefs.setString(
+                'favorite_entries_cache', jsonEncode(retained));
+          }
+        }
+      } catch (_) {
+        // Preserve an unreadable cache rather than risking loss of Quran data.
+      }
+    }
+    return removed;
   }
 }
 

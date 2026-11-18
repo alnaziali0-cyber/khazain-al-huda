@@ -10,7 +10,9 @@ import 'models.dart';
 import 'governorate_repository.dart';
 import 'location_coordinates_store.dart';
 import 'misr_quran_prayer_times.dart';
+import 'iraq_prayer_schedule.dart';
 import 'wallpapers.dart';
+import 'audio_playback_service.dart';
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) =>
     throw UnimplementedError(
@@ -211,6 +213,11 @@ final selectedPrayerCityProvider =
 
 final misrQuranPrayerTimesApiSourceProvider = Provider<PrayerTimesApiSource>(
   (ref) => MisrQuranPrayerTimesRepository(),
+);
+
+final iraqPrayerScheduleRepositoryProvider =
+    Provider<IraqPrayerScheduleRepository>(
+  (ref) => IraqPrayerScheduleRepository(),
 );
 
 Future<void> clearGpsPrayerCache(
@@ -455,6 +462,17 @@ final prayerTimesForDateProvider = FutureProvider.autoDispose
   }
   final gpsLocation = storedLocation?.source == 'gps' ? storedLocation : null;
   final useCoordinates = cityId == null && gpsLocation != null;
+  if (method == 'jafari_qom' &&
+      prefs.getString('selected_location_source') != 'gps') {
+    final scheduled = await ref
+        .watch(iraqPrayerScheduleRepositoryProvider)
+        .lookup(
+          date: targetDay,
+          governorateId: governorateId,
+          cityId: cityId,
+        );
+    if (scheduled != null) return scheduled;
+  }
   final locationKey = cityId != null
       ? 'city_$cityId'
       : gpsLocation != null
@@ -549,6 +567,18 @@ final prayerTimesProvider = FutureProvider<PrayerTimesResult?>((ref) async {
     } catch (_) {
       storedCoordinates = null;
     }
+  }
+
+  final selectedMethod = ref.watch(selectedPrayerMethodProvider) ?? 'jafari_qom';
+  if (selectedMethod == 'jafari_qom' && selectedLocationSource != 'gps') {
+    final scheduled = await ref
+        .watch(iraqPrayerScheduleRepositoryProvider)
+        .lookup(
+          date: today,
+          governorateId: governorateId,
+          cityId: cityId,
+        );
+    if (scheduled != null) return scheduled;
   }
 
   final locationIdentity = cityId != null

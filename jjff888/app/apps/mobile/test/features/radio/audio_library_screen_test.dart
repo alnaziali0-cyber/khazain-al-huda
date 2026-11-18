@@ -1,53 +1,79 @@
-import 'dart:io';
-
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:khazain_al_huda/core/quran_audio_service.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:khazain_al_huda/core/audio_playback_service.dart';
 import 'package:khazain_al_huda/features/radio/audio_library_screen.dart';
 
-void main() {
-  testWidgets('shows a clear unavailable state when no local audio exists',
-      (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: AudioLibraryScreen(
-            loadLocalAudio: () async => const <LocalQuranAudio>[],
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+class _FakePlayback implements AppAudioPlayback {
+  @override
+  Stream<PlaybackState> get playbackStateStream => const Stream<PlaybackState>.empty();
 
-    expect(find.text('مكتبة الصوتيات'), findsOneWidget);
-    expect(find.textContaining('لا تتوفر حالياً ملفات تلاوة محلية'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'فتح المصحف'), findsOneWidget);
+  @override
+  bool get isPlaying => false;
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> play() async {}
+
+  @override
+  Future<void> playLocal({
+    required String path,
+    required String id,
+    required String title,
+    String artist = 'خزائن الهدى',
+    String album = 'القرآن الكريم',
+  }) async {}
+
+  @override
+  Future<void> playRemote({
+    required Uri uri,
+    required String id,
+    required String title,
+    String artist = 'خزائن الهدى',
+    String album = 'المكتبة الصوتية',
+  }) async {}
+
+  @override
+  Future<void> setLoopMode(LoopMode mode) async {}
+
+  @override
+  Future<void> stop() async {}
+}
+
+Widget _testApp(Widget child) => ProviderScope(
+      overrides: [appAudioPlaybackProvider.overrideWithValue(_FakePlayback())],
+      child: MaterialApp(home: Scaffold(body: child)),
+    );
+
+void main() {
+  testWidgets('shows empty licensed catalogue state', (tester) async {
+    await tester.pumpWidget(_testApp(
+      AudioLibraryScreen(loadTracks: () async => []),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('المكتبة الصوتية'), findsOneWidget);
+    expect(find.textContaining('ستظهر هنا فقط الملفات'), findsOneWidget);
     expect(find.textContaining('https://'), findsNothing);
-    expect(find.text('فتح صفحة المصدر'), findsNothing);
-    expect(find.byIcon(Icons.open_in_new_rounded), findsNothing);
   });
 
-  testWidgets('lists existing local audio files without displaying external URLs',
+  testWidgets('shows only published tracks returned by the public catalogue',
       (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: AudioLibraryScreen(
-            loadLocalAudio: () async => [
-              LocalQuranAudio(
-                surahNumber: 1,
-                file: File('/local/test/surah_001.mp3'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    await tester.pumpWidget(_testApp(AudioLibraryScreen(loadTracks: () async => [
+      {
+        'id': 7,
+        'title': 'أذان تجريبي مرخص',
+        'category': 'adhan',
+        'source_url': 'https://example.org/audio.mp3',
+        'can_download': false,
+      }
+    ])));
     await tester.pumpAndSettle();
-
-    expect(find.text('تلاوة محفوظة · السورة 1'), findsOneWidget);
-    expect(find.text('ملف محلي على هذا الجهاز'), findsOneWidget);
-    expect(find.textContaining('https://'), findsNothing);
-    expect(find.byIcon(Icons.open_in_new_rounded), findsNothing);
+    expect(find.text('أذان تجريبي مرخص'), findsOneWidget);
+    expect(find.text('adhan'), findsOneWidget);
+    expect(find.byTooltip('تنزيل مرخص'), findsNothing);
   });
 }

@@ -470,35 +470,25 @@ def test_domain_catalog_exposes_only_published_and_provenance_gated_records():
 
     with TestClient(app) as client:
         books = client.get('/api/v1/public/catalog/book', params={'search': marker}).json()
-        assert books['total'] == 1
-        assert books['items'][0]['title'] == f"Book {marker}"
-        assert books['items'][0]['offline_access_allowed'] is True
+        assert books['total'] == 0 and books['items'] == []
         pages = client.get(f'/api/v1/public/books/{book_id}/pages')
-        assert pages.status_code == 200
-        assert pages.json()['book']['offline_access_allowed'] is True
-        assert pages.json()['items'][0]['text_content'] == "صفحة اختبار موثقة"
+        assert pages.status_code == 404
         resumed_pages = client.get(f'/api/v1/public/books/{book_id}/pages', params={
             'volume_number': 1, 'start_page_number': 2,
         })
-        assert resumed_pages.status_code == 200
-        assert resumed_pages.json()['items'][0]['page_number'] == 2
-        assert resumed_pages.json()['items'][0]['text_content'] == "صفحة استكمال اختبار موثقة"
+        assert resumed_pages.status_code == 404
         blocked_pages = client.get('/api/v1/public/books/999999/pages')
         assert blocked_pages.status_code == 404
         blocked_unproven_pages = client.get(f'/api/v1/public/books/{missing_evidence_book_id}/pages')
         assert blocked_unproven_pages.status_code == 404
 
         hadiths = client.get('/api/v1/public/catalog/hadith', params={'search': marker}).json()
-        assert hadiths['total'] == 1
-        assert hadiths['items'][0]['chain_text'] == "سند اختباري منفصل"
-        assert hadiths['items'][0]['gradings'][0]['scholar'] == "باحث اختباري"
-        assert hadiths['items'][0]['gradings'][0]['grading'] == "غير محسوم"
+        assert hadiths['total'] == 0 and hadiths['items'] == []
 
         duas = client.get('/api/v1/public/catalog/dua', params={'search': marker}).json()
-        assert duas['total'] == 1
-        assert duas['items'][0]['source_reference'] == "المصدر: صفحة 1"
+        assert duas['total'] == 0 and duas['items'] == []
         visits = client.get('/api/v1/public/catalog/visit', params={'search': marker}).json()
-        assert visits['total'] == 1
+        assert visits['total'] == 0 and visits['items'] == []
         events = client.get('/api/v1/public/catalog/event', params={'search': marker}).json()
         assert events['total'] == 1
         assert events['items'][0]['date_certainty'] == 'disputed_or_local'
@@ -610,9 +600,7 @@ def test_admin_catalog_cms_validates_provenance_rights_and_review_workflow():
         assert published_book.status_code == 200, published_book.text
         assert published_book.json()["record"]["offline_access_allowed"] is True
         public_pages = client.get(f"/api/v1/public/books/{book_id}/pages")
-        assert public_pages.status_code == 200
-        assert public_pages.json()["book"]["offline_access_allowed"] is True
-        assert public_pages.json()["items"][1]["text_content"] == "نص الصفحة بعد المراجعة"
+        assert public_pages.status_code == 404
 
         source = client.post("/api/v1/admin/catalog/hadith_source", json={
             "title": f"مصدر حديثي {marker}", "author": "مؤلف المصدر",
@@ -707,10 +695,9 @@ def test_admin_catalog_cms_validates_provenance_rights_and_review_workflow():
 
         public_hadith = client.get("/api/v1/public/catalog/hadith", params={"search": marker})
         assert public_hadith.status_code == 200
-        assert public_hadith.json()["total"] == 1
-        assert public_hadith.json()["items"][0]["gradings"][0]["grading"] == "غير محسوم"
-        assert client.get("/api/v1/public/catalog/dua", params={"search": marker}).json()["total"] == 1
-        assert client.get("/api/v1/public/catalog/visit", params={"search": marker}).json()["total"] == 1
+        assert public_hadith.json()["total"] == 0
+        assert client.get("/api/v1/public/catalog/dua", params={"search": marker}).json()["total"] == 0
+        assert client.get("/api/v1/public/catalog/visit", params={"search": marker}).json()["total"] == 0
         assert client.get("/api/v1/public/catalog/event", params={"search": marker}).json()["total"] == 1
         assert client.get("/api/v1/public/catalog/ethics_lesson", params={"search": marker}).json()["total"] == 1
         assert client.get("/api/v1/public/catalog/audio", params={"search": marker}).json()["total"] == 1
@@ -736,34 +723,29 @@ def test_admin_catalog_requires_csrf_for_mutations_and_rejects_unknown_fields():
         assert unknown_field.status_code == 422
 
 
-def test_device_favorites_and_book_reading_progress_are_scoped_and_provenance_gated():
+def test_cleared_book_favorites_and_reading_progress_are_disabled_but_other_favorites_work():
     from uuid import uuid4
     from app.db.session import SessionLocal
-    from app.models import Book, BookPage
+    from app.models import Book, Favorite, IslamicEvent
 
     marker = uuid4().hex[:12]
     with SessionLocal() as db:
         book = Book(
-            title=f"Favorite Book {marker}", author="مؤلف اختباري",
-            description="كتاب اختبار للمفضلة وموضع القراءة",
-            source_url="https://example.invalid/favorite-book",
+            title=f"Cleared Book {marker}", author="مؤلف اختباري",
+            description="كتاب اختبار لا يفترض عرضه",
+            source_url="https://example.invalid/cleared-book",
             rights_status="permission_granted",
-            rights_evidence="دليل حقوق اختباري لاستخدام الاختبار فقط",
+            rights_evidence="دليل حقوق للاختبار فقط",
             publication_status="published", volume_count=2,
         )
-        unverified = Book(
-            title=f"Unverified Book {marker}", source_url="https://example.invalid/unverified",
-            rights_status="unverified", rights_evidence=None, publication_status="published",
+        event = IslamicEvent(
+            title=f"Favorite Event {marker}", event_type="ذكرى",
+            date_certainty="disputed_or_local", historical_sources=[{"title": "مصدر اختباري"}],
+            is_published=True, hijri_month=1, hijri_day=1,
         )
-        db.add_all([book, unverified])
+        db.add_all([book, event])
         db.flush()
-        db.add_all([
-            BookPage(book_id=book.id, volume_number=1, page_number=1, text_content="صفحة أولى للاختبار"),
-            BookPage(book_id=book.id, volume_number=1, page_number=2, text_content="صفحة ثانية للاختبار"),
-            BookPage(book_id=book.id, volume_number=2, page_number=1, text_content="صفحة أولى من المجلد الثاني"),
-        ])
-        book_id = book.id
-        unverified_id = unverified.id
+        book_id, event_id = book.id, event.id
         db.commit()
 
     first_device = "device_key_for_favorites_test_0001"
@@ -772,16 +754,18 @@ def test_device_favorites_and_book_reading_progress_are_scoped_and_provenance_ga
         assert client.get("/api/v1/user/favorites").status_code == 422
         assert client.get("/api/v1/user/favorites", headers={"X-Device-Key": "short"}).status_code == 422
 
-        blocked = client.post("/api/v1/user/favorites", headers={"X-Device-Key": first_device}, json={
-            "entity_type": "book", "entity_id": str(unverified_id),
+        book_favorite = client.post("/api/v1/user/favorites", headers={"X-Device-Key": first_device}, json={
+            "entity_type": "book", "entity_id": str(book_id),
         })
-        assert blocked.status_code == 404
+        assert book_favorite.status_code == 404
+        assert client.get(f"/api/v1/user/books/{book_id}/reading-progress", headers={
+            "X-Device-Key": first_device,
+        }).status_code == 404
+        assert client.put(f"/api/v1/user/books/{book_id}/reading-progress", headers={
+            "X-Device-Key": first_device,
+        }, json={"volume_number": 1, "page_number": 1}).status_code == 404
 
-        public_pages = client.get(f"/api/v1/public/books/{book_id}/pages")
-        assert public_pages.status_code == 200
-        assert public_pages.json()["book"]["offline_access_allowed"] is False
-
-        payload = {"entity_type": "book", "entity_id": str(book_id)}
+        payload = {"entity_type": "event", "entity_id": str(event_id)}
         saved = client.post("/api/v1/user/favorites", headers={"X-Device-Key": first_device}, json=payload)
         assert saved.status_code == 200 and saved.json()["saved"] is True
         repeated = client.post("/api/v1/user/favorites", headers={"X-Device-Key": first_device}, json=payload)
@@ -789,16 +773,15 @@ def test_device_favorites_and_book_reading_progress_are_scoped_and_provenance_ga
         first_list = client.get("/api/v1/user/favorites", headers={"X-Device-Key": first_device}).json()
         second_list = client.get("/api/v1/user/favorites", headers={"X-Device-Key": second_device}).json()
         assert first_list["total"] == 1
-        assert first_list["items"][0]["title"] == f"Favorite Book {marker}"
+        assert first_list["items"][0]["title"] == f"Favorite Event {marker}"
         assert second_list["total"] == 0
 
         from app.core.security import keyed_hash
-        from app.models import Favorite
         with SessionLocal() as db:
             db.add_all([
                 Favorite(
                     user_id=None, device_key_hash=keyed_hash(second_device),
-                    entity_type="book", entity_id=str(900000000 - index),
+                    entity_type="event", entity_id=str(900000000 - index),
                 )
                 for index in range(100)
             ])
@@ -807,16 +790,15 @@ def test_device_favorites_and_book_reading_progress_are_scoped_and_provenance_ga
         assert capped.status_code == 409
 
         from sqlalchemy.exc import IntegrityError
-        from app.models import Favorite
         with SessionLocal() as db:
             favorite_row = db.query(Favorite).filter_by(
-                user_id=None, entity_type="book", entity_id=str(book_id),
+                user_id=None, entity_type="event", entity_id=str(event_id),
             ).one()
             assert favorite_row.device_key_hash != first_device
             assert len(favorite_row.device_key_hash) == 64
             db.add(Favorite(
                 user_id=None, device_key_hash=favorite_row.device_key_hash,
-                entity_type="book", entity_id=str(book_id),
+                entity_type="event", entity_id=str(event_id),
             ))
             try:
                 db.commit()
@@ -825,50 +807,12 @@ def test_device_favorites_and_book_reading_progress_are_scoped_and_provenance_ga
                 db.rollback()
 
         denied_extra = client.post("/api/v1/user/favorites", headers={"X-Device-Key": first_device}, json={
-            "entity_type": "book", "entity_id": str(book_id), "admin": True,
+            "entity_type": "event", "entity_id": str(event_id), "admin": True,
         })
         assert denied_extra.status_code == 422
 
-        invalid_progress = client.put(
-            f"/api/v1/user/books/{book_id}/reading-progress",
-            headers={"X-Device-Key": first_device},
-            json={"volume_number": 1, "page_number": 99},
-        )
-        assert invalid_progress.status_code == 404
-        invalid_volume = client.put(
-            f"/api/v1/user/books/{book_id}/reading-progress",
-            headers={"X-Device-Key": first_device},
-            json={"volume_number": 3, "page_number": 1},
-        )
-        assert invalid_volume.status_code == 422
-
-        saved_progress = client.put(
-            f"/api/v1/user/books/{book_id}/reading-progress",
-            headers={"X-Device-Key": first_device},
-            json={"volume_number": 1, "page_number": 2},
-        )
-        assert saved_progress.status_code == 200, saved_progress.text
-        assert saved_progress.json()["page_number"] == 2
-        updated_progress = client.put(
-            f"/api/v1/user/books/{book_id}/reading-progress",
-            headers={"X-Device-Key": first_device},
-            json={"volume_number": 1, "page_number": 1},
-        )
-        assert updated_progress.status_code == 200
-        restored = client.get(
-            f"/api/v1/user/books/{book_id}/reading-progress",
-            headers={"X-Device-Key": first_device},
-        )
-        assert restored.status_code == 200
-        assert restored.json()["progress"]["page_number"] == 1
-        isolated = client.get(
-            f"/api/v1/user/books/{book_id}/reading-progress",
-            headers={"X-Device-Key": second_device},
-        )
-        assert isolated.status_code == 200 and isolated.json()["progress"] is None
-
         removed = client.delete(
-            f"/api/v1/user/favorites/book/{book_id}", headers={"X-Device-Key": first_device},
+            f"/api/v1/user/favorites/event/{event_id}", headers={"X-Device-Key": first_device},
         )
         assert removed.status_code == 200 and removed.json()["removed"] is True
         assert client.get("/api/v1/user/favorites", headers={"X-Device-Key": first_device}).json()["total"] == 0

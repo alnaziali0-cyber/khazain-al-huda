@@ -74,7 +74,7 @@ class PrayerCityEntry {
       );
 }
 
-enum PrayerTimesSource { localCalculation, misrQuranApi }
+enum PrayerTimesSource { localCalculation, misrQuranApi, iraqJafariSchedule }
 
 class PrayerTimesResult {
   const PrayerTimesResult({
@@ -106,6 +106,8 @@ class PrayerTimesResult {
         PrayerTimesSource.misrQuranApi => 'خدمة MisrQuran (غير معتمدة فقهياً)',
         PrayerTimesSource.localCalculation =>
           'حساب التطبيق المحلي (غير معتمد فقهياً)',
+        PrayerTimesSource.iraqJafariSchedule =>
+          'جدول عراقي جعفري محلي 2026–2027 (غير معتمد مرجعياً)',
       };
 
   PrayerTimesResult copyWith({
@@ -148,7 +150,9 @@ class PrayerTimesResult {
       isStale: isStale,
       source: json['source'] == 'misr_quran_api'
           ? PrayerTimesSource.misrQuranApi
-          : PrayerTimesSource.localCalculation,
+          : json['source'] == 'iraq_jafari_schedule'
+              ? PrayerTimesSource.iraqJafariSchedule
+              : PrayerTimesSource.localCalculation,
       hijriDate: json['hijri_date']?.toString(),
       locationName: location['name_ar']?.toString(),
       coordinateAccuracy: location['coordinates_quality']?.toString(),
@@ -164,7 +168,9 @@ class PrayerTimesResult {
         'definitions': definitions,
         'source': source == PrayerTimesSource.misrQuranApi
             ? 'misr_quran_api'
-            : 'local_calculation',
+            : source == PrayerTimesSource.iraqJafariSchedule
+                ? 'iraq_jafari_schedule'
+                : 'local_calculation',
         if (hijriDate != null) 'hijri_date': hijriDate,
         'location': {
           'name_ar': locationName,

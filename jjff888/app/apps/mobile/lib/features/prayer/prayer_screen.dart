@@ -9,6 +9,7 @@ import '../../core/models.dart';
 class PrayerScreen extends ConsumerWidget {
   const PrayerScreen({super.key});
   static const labels = {
+    'imsak': 'الإمساك',
     'fajr': 'الفجر',
     'sunrise': 'الشروق',
     'dhuhr': 'الظهر',
@@ -212,6 +213,14 @@ class _TimesPanel extends StatelessWidget {
                 ],
                 Text('مصدر مواقيت اليوم: ${data.sourceLabel}'),
                 Text('طريقة الحساب / المصدر: ${data.methodLabel}'),
+                if (data.source == PrayerTimesSource.iraqJafariSchedule)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'جدول حسابي محلي يغطي 2026–2027. ليس تقويماً رسمياً أو اعتماداً مرجعياً؛ قد تختلف الدقائق بحسب الإحداثيات والرؤية وطريقة الحساب.',
+                      style: TextStyle(height: 1.55),
+                    ),
+                  ),
                 if (data.isStale)
                   const Padding(
                     padding: EdgeInsets.only(top: 8),

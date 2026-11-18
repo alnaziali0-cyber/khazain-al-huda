@@ -641,6 +641,8 @@ const _homeShortcuts = <_HomeSectionShortcut>[
   _HomeSectionShortcut(
       title: 'الأخلاق والتعلم', icon: Icons.school_rounded, route: '/ethics'),
   _HomeSectionShortcut(
+      title: 'قصص تربوية', icon: Icons.auto_stories_rounded, route: '/stories'),
+  _HomeSectionShortcut(
       title: 'المفضلة', icon: Icons.favorite_rounded, route: '/favorites'),
   _HomeSectionShortcut(
       title: 'الإذاعة', icon: Icons.radio_rounded, route: '/radio'),

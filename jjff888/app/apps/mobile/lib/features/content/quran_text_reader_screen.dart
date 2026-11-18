@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/audio_playback_service.dart';
 import '../../core/providers.dart';
 import '../../core/quran_audio_service.dart';
 import '../../core/quran_text_repository.dart';
@@ -31,9 +33,9 @@ class _QuranTextReaderScreenState extends ConsumerState<QuranTextReaderScreen> {
   final ItemScrollController _itemScrollController = ItemScrollController();
   final ItemPositionsListener _itemPositionsListener =
       ItemPositionsListener.create();
-  late final AudioPlayer _player;
+  late final AppAudioPlayback _playback;
   late final QuranAudioService _audioService;
-  StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<PlaybackState>? _playerStateSubscription;
   Timer? _lastReadTimer;
   double _fontSize = 30;
   bool _repeatAyah = false;
@@ -48,11 +50,11 @@ class _QuranTextReaderScreenState extends ConsumerState<QuranTextReaderScreen> {
         ref.read(sharedPreferencesProvider).getDouble('quran_font_size');
     _fontSize = (savedFontSize ?? 30).clamp(22, 44).toDouble();
     _audioService = QuranAudioService();
-    _player = AudioPlayer();
-    _playerStateSubscription = _player.playerStateStream.listen((state) {
+    _playback = ref.read(appAudioPlaybackProvider);
+    _playerStateSubscription = _playback.playbackStateStream.listen((state) {
       if (!mounted) return;
       setState(() {
-        if (state.processingState == ProcessingState.completed &&
+        if (state.processingState == AudioProcessingState.completed &&
             !(_playingAyah && _repeatAyah)) {
           _audioLabel = null;
           _playingAyah = false;
@@ -67,7 +69,6 @@ class _QuranTextReaderScreenState extends ConsumerState<QuranTextReaderScreen> {
     _lastReadTimer?.cancel();
     _itemPositionsListener.itemPositions.removeListener(_onVisibleItemsChanged);
     _playerStateSubscription?.cancel();
-    _player.dispose();
     super.dispose();
   }
 
@@ -114,20 +115,52 @@ class _QuranTextReaderScreenState extends ConsumerState<QuranTextReaderScreen> {
   Future<void> _playSurah(QuranTextSurah surah) async {
     try {
       final offline = await _audioService.existingSurahFile(surah.number);
-      if (offline == null) {
-        _showMessage('لا تتوفر تلاوة محلية محفوظة لهذه السورة على هذا الجهاز.');
-        return;
+      await _playback.setLoopMode(LoopMode.off);
+      if (offline != null) {
+        await _playback.playLocal(
+          path: offline.path,
+          id: 'quran-surah-${surah.number}',
+          title: 'سورة ${surah.nameAr}',
+          album: 'القرآن الكريم',
+        );
+      } else {
+        // The public audio catalogue only returns recordings that passed the
+        // server-side rights gate (stream permission + documented evidence).
+        final response = await ref.read(apiProvider).get<Map<String, dynamic>>(
+          '/api/v1/public/catalog/audio',
+          queryParameters: {'search': surah.nameAr, 'limit': 100, 'offset': 0},
+        );
+        final rawItems = response.data?['items'];
+        final candidates = rawItems is List
+            ? rawItems.whereType<Map>().map((item) => Map<String, dynamic>.from(item))
+            : const <Map<String, dynamic>>[];
+        final matches = candidates.where((item) {
+          final category = (item['category'] ?? '').toString().toLowerCase();
+          final title = (item['title'] ?? '').toString();
+          return ['quran', 'quran_recitation', 'tilawa'].contains(category) &&
+              title.contains(surah.nameAr) &&
+              (Uri.tryParse(item['source_url']?.toString() ?? '')?.scheme == 'https');
+        }).toList();
+        final matching = matches.isEmpty ? null : matches.first;
+        if (matching == null) {
+          _showMessage('لا تتوفر تلاوة منشورة ومرخصة لهذه السورة حالياً.');
+          return;
+        }
+        await _playback.playRemote(
+          uri: Uri.parse(matching['source_url'] as String),
+          id: 'quran-audio-${matching['id'] ?? surah.number}',
+          title: 'سورة ${surah.nameAr}',
+          artist: (matching['reciter'] ?? 'قارئ القرآن').toString(),
+          album: 'القرآن الكريم',
+        );
       }
-      await _player.setLoopMode(LoopMode.off);
-      await _player.setAudioSource(AudioSource.file(offline.path));
       if (!mounted) return;
       setState(() {
         _audioLabel = '${surah.nameAr} · السورة كاملة';
         _playingAyah = false;
       });
-      await _player.play();
     } catch (_) {
-      _showMessage('تعذر تشغيل ملف التلاوة المحلي.');
+      _showMessage('تعذر تشغيل التلاوة. تحقق من الاتصال أو التسجيل المنشور.');
     }
   }
 
@@ -140,15 +173,19 @@ class _QuranTextReaderScreenState extends ConsumerState<QuranTextReaderScreen> {
         _showMessage('لا يتوفر ملف صوتي محلي لهذه الآية على هذا الجهاز.');
         return;
       }
-      await _player.setLoopMode(_repeatAyah ? LoopMode.one : LoopMode.off);
-      await _player.setAudioSource(AudioSource.file(offline.path));
-      if (!mounted) return;
+      await _playback.setLoopMode(_repeatAyah ? LoopMode.one : LoopMode.off);
       final surah = library.surahByNumber(ayah.surahNumber);
+      await _playback.playLocal(
+        path: offline.path,
+        id: 'quran-ayah-$globalNumber',
+        title: '${surah?.nameAr ?? 'القرآن'} · الآية ${ayah.ayahNumber}',
+        album: 'القرآن الكريم',
+      );
+      if (!mounted) return;
       setState(() {
         _audioLabel = '${surah?.nameAr ?? ''} · الآية ${ayah.ayahNumber}';
         _playingAyah = true;
       });
-      await _player.play();
     } catch (_) {
       _showMessage('تعذر تشغيل ملف الآية المحلي.');
     }
@@ -158,7 +195,7 @@ class _QuranTextReaderScreenState extends ConsumerState<QuranTextReaderScreen> {
     final next = !_repeatAyah;
     setState(() => _repeatAyah = next);
     if (_playingAyah) {
-      await _player.setLoopMode(next ? LoopMode.one : LoopMode.off);
+      await _playback.setLoopMode(next ? LoopMode.one : LoopMode.off);
     }
   }
 
@@ -434,14 +471,14 @@ class _QuranTextReaderScreenState extends ConsumerState<QuranTextReaderScreen> {
                 if (_audioLabel != null)
                   _AudioDock(
                     label: _audioLabel!,
-                    playing: _player.playing,
+                    playing: _playback.isPlaying,
                     repeating: _repeatAyah,
                     showRepeat: _playingAyah,
                     onPlayPause: () =>
-                        _player.playing ? _player.pause() : _player.play(),
+                        _playback.isPlaying ? _playback.pause() : _playback.play(),
                     onRepeat: _toggleRepeat,
                     onStop: () async {
-                      await _player.stop();
+                      await _playback.stop();
                       if (mounted) setState(() => _audioLabel = null);
                     },
                   ),

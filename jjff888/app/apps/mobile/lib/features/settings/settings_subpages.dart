@@ -291,7 +291,7 @@ class PrivacyDataScreen extends ConsumerWidget {
                 icon: Icons.menu_book_outlined,
                 title: 'المحتوى دون اتصال',
                 status: 'مؤقت',
-                subtitle: 'فهارس وصفحات الكتب ونسخ المفضلة من آخر تحميل.',
+                subtitle: 'نسخ محلية للمواقيت والبيانات التي يحتفظ بها التطبيق.',
               ),
               const SettingsStatusRow(
                 icon: Icons.touch_app_outlined,
@@ -301,10 +301,10 @@ class PrivacyDataScreen extends ConsumerWidget {
               ),
               const SettingsStatusRow(
                 icon: Icons.bookmark_border,
-                title: 'موضع القراءة في الكتب',
+                title: 'موضع قراءة الكتب السابق',
                 status: 'على الخادم',
                 subtitle:
-                    'يُحفظ على الخادم، ونسخة محلية على الجهاز لاستخدامها دون اتصال.',
+                    'لا توجد حالياً صفحات كتب مفعّلة داخل التطبيق.',
               ),
               const SettingsStatusRow(
                 icon: Icons.tune_rounded,
@@ -349,7 +349,7 @@ class PrivacyDataScreen extends ConsumerWidget {
               SettingsTile(
                 icon: Icons.cleaning_services_outlined,
                 title: 'مسح المحتوى المخزن دون اتصال',
-                subtitle: 'يزيل نسخ الكتب والفهارس المحفوظة محلياً',
+                subtitle: 'يزيل بقايا بيانات الأقسام التي أُفرغت فقط، مع إبقاء القرآن والمناسبات والمفضلة الأخرى.',
                 onTap: () => _clearOfflineContent(context, ref),
               ),
             ],
@@ -427,7 +427,7 @@ class PrivacyDataScreen extends ConsumerWidget {
       context,
       title: 'مسح المحتوى المخزن دون اتصال؟',
       body:
-          'ستُحذف صفحات الكتب والفهارس المحفوظة لقراءتها دون اتصال، ويمكن تحميلها مجدداً عند الاتصال. المفضلة على الخادم وموضع القراءة لا يتأثران.',
+          'ستُحذف بقايا الفهارس وصفحات الأقسام التي أُفرغت، وتُفلتر المفضلة لإزالة عناصرها القديمة فقط. لن تُمس بيانات القرآن أو المناسبات أو الإعدادات أو بقية المفضلة.',
       confirmLabel: 'مسح',
     );
     if (!confirmed || !context.mounted) return;

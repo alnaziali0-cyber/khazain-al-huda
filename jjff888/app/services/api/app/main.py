@@ -890,10 +890,7 @@ def public_book_pages(
     if (book_id < 1 or volume_number < 1 or not 1 <= limit <= 100 or not 0 <= offset <= 100000
             or (start_page_number is not None and not 1 <= start_page_number <= 100000)):
         raise HTTPException(status_code=422, detail="Invalid book pagination parameters")
-    return get_book_pages(
-        db, book_id, volume_number=volume_number, limit=limit, offset=offset,
-        start_page_number=start_page_number,
-    )
+    raise HTTPException(status_code=404, detail="The books section has been cleared")
 
 
 def _require_device_hash(x_device_key: str = Header(default="", alias="X-Device-Key")) -> str:
@@ -929,6 +926,8 @@ def _resolve_favorite_item(
     db: Session, entity_type: str, entity_id: str, *, quran_ready: bool | None = None,
 ) -> dict | None:
     reusable_rights = {"licensed", "public_domain", "permission_granted"}
+    if entity_type in {"book", "hadith", "dua", "visit"}:
+        return None
     if entity_type == "quran_ayah":
         match = re.fullmatch(r"([1-9][0-9]{0,2}):([1-9][0-9]{0,2})", entity_id)
         if not match:
@@ -1068,71 +1067,17 @@ def remove_device_favorite(
 
 @app.get("/api/v1/user/books/{book_id}/reading-progress")
 def get_device_book_progress(
-    book_id: int, device_hash: str = Depends(_require_device_hash), db: Session = Depends(get_db),
+    book_id: int, device_hash: str = Depends(_require_device_hash),
 ):
-    book = db.get(Book, book_id)
-    if not book or book.publication_status != "published" or book.rights_status not in {"licensed", "public_domain", "permission_granted"} or not book.rights_evidence or not _https_only(book.source_url):
-        raise HTTPException(status_code=404, detail="Book not found")
-    rows = db.query(BookReadingProgress).filter(
-        BookReadingProgress.device_key_hash == device_hash,
-        BookReadingProgress.book_id == book_id,
-    ).order_by(BookReadingProgress.updated_at.desc()).all()
-    progress = rows[0] if rows else None
-    return {"progress": ({
-        "volume_number": progress.volume_number,
-        "page_number": progress.page_number,
-        "updated_at": progress.updated_at.isoformat(),
-    } if progress else None)}
+    raise HTTPException(status_code=404, detail="The books section has been cleared")
 
 
 @app.put("/api/v1/user/books/{book_id}/reading-progress")
 def save_device_book_progress(
     book_id: int, payload: BookReadingProgressPayload,
-    device_hash: str = Depends(_require_device_hash), db: Session = Depends(get_db),
+    device_hash: str = Depends(_require_device_hash),
 ):
-    book = db.get(Book, book_id)
-    if not book or book.publication_status != "published" or book.rights_status not in {"licensed", "public_domain", "permission_granted"} or not book.rights_evidence or not _https_only(book.source_url):
-        raise HTTPException(status_code=404, detail="Book not found")
-    if book.volume_count is not None and payload.volume_number > book.volume_count:
-        raise HTTPException(status_code=422, detail="Volume number exceeds the published book volume count")
-    page = db.query(BookPage).filter(
-        BookPage.book_id == book_id,
-        BookPage.volume_number == payload.volume_number,
-        BookPage.page_number == payload.page_number,
-    ).first()
-    if not page:
-        raise HTTPException(status_code=404, detail="Published book page not found")
-    progress = db.query(BookReadingProgress).filter(
-        BookReadingProgress.device_key_hash == device_hash,
-        BookReadingProgress.book_id == book_id,
-        BookReadingProgress.volume_number == payload.volume_number,
-    ).first()
-    now = datetime.now(timezone.utc)
-    if progress:
-        progress.page_number = payload.page_number
-        progress.updated_at = now
-    else:
-        progress = BookReadingProgress(
-            device_key_hash=device_hash, book_id=book_id,
-            volume_number=payload.volume_number, page_number=payload.page_number,
-            updated_at=now,
-        )
-        db.add(progress)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        progress = db.query(BookReadingProgress).filter(
-            BookReadingProgress.device_key_hash == device_hash,
-            BookReadingProgress.book_id == book_id,
-            BookReadingProgress.volume_number == payload.volume_number,
-        ).first()
-        if not progress:
-            raise HTTPException(status_code=409, detail="Reading position could not be saved; retry safely")
-        progress.page_number = payload.page_number
-        progress.updated_at = now
-        db.commit()
-    return {"saved": True, "book_id": book_id, "volume_number": payload.volume_number, "page_number": payload.page_number, "updated_at": now.isoformat()}
+    raise HTTPException(status_code=404, detail="The books section has been cleared")
 
 
 @app.get("/api/v1/public/content")

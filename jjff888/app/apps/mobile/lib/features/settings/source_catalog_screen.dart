@@ -67,6 +67,26 @@ class SourceCatalogScreen extends ConsumerWidget {
               'هذه قائمة داخلية بالمصادر وشروط الاستخدام. لا تفتح هذه الصفحة مواقع خارجية؛ يلزم مراجعة حقوق كل مادة قبل عرضها أو تشغيلها.',
               style: TextStyle(height: 1.7),
             ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(15),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'مكتبة خزائن الهدى النصية المحلية',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 7),
+                    const Text(
+                      'تضم 103 مواد نصية تعمل دون اتصال. المواد التحريرية الأصلية مرخصة وفق CC BY 4.0 مع الإسناد إلى خزائن الهدى، ومقتطفات ويكي مصدر وفق CC BY-SA 4.0 مع الإسناد والمشاركة بالمثل. تظهر بيانات المصدر والرخصة داخل كل مادة، وتفاصيلها محفوظة في مجلد المكتبة.',
+                      style: TextStyle(height: 1.65),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 16),
             sources.when(
               loading: () => const Center(child: CircularProgressIndicator()),

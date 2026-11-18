@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers.dart';
 import '../../core/safe_display_text.dart';
-import 'library_reference_panel.dart';
+import 'local_text_library.dart';
 
 class QuranStatusScreen extends ConsumerWidget {
   const QuranStatusScreen({super.key});
@@ -150,6 +150,27 @@ class ContentStatusScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final localCategory = switch (contentType) {
+      'book' => 'book',
+      'hadith' => 'hadith',
+      'dua' => 'dua',
+      'visit' => 'visit',
+      'ethics_lesson' => 'ethics',
+      'story' => 'story',
+      _ => null,
+    };
+    if (localCategory != null) {
+      final localTitle = localCategory == 'ethics'
+          ? 'الأخلاق والتربية'
+          : localCategory == 'story'
+              ? 'القصص التربوية'
+              : title;
+      return LocalTextLibraryScreen(
+        category: localCategory,
+        title: localTitle,
+        initialSearch: search,
+      );
+    }
     final searchTerm = search?.trim() ?? '';
     final catalog = ref.watch(contentItemsProvider((contentType, searchTerm)));
     return _PageFrame(
@@ -159,10 +180,6 @@ class ContentStatusScreen extends ConsumerWidget {
         error: (_, __) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (contentType == 'book') ...[
-              const LibraryReferencePanel(),
-              const SizedBox(height: 14),
-            ],
             _UnavailableCard(
               message: 'تعذر الاتصال بخدمة المحتوى حالياً. $description',
             ),
@@ -173,10 +190,6 @@ class ContentStatusScreen extends ConsumerWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (contentType == 'book') ...[
-                  const LibraryReferencePanel(),
-                  const SizedBox(height: 14),
-                ],
                 const _UnavailableCard(
                   message: 'لا توجد حالياً مواد موثقة منشورة في هذا القسم. لن تظهر نصوص أو كتب أو روايات منسوبة دون إدخال المصدر ومراجعته.',
                 ),
@@ -199,10 +212,6 @@ class ContentStatusScreen extends ConsumerWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (contentType == 'book') ...[
-                const LibraryReferencePanel(),
-                const SizedBox(height: 14),
-              ],
               if (result.isStale)
                 const Padding(
                   padding: EdgeInsets.only(bottom: 10),

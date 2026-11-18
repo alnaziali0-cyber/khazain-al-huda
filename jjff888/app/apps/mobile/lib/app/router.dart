@@ -15,10 +15,12 @@ import '../features/content/content_screen.dart';
 import '../features/content/ahl_al_bayt_content_screen.dart';
 import '../features/content/wallpapers_screen.dart';
 import '../features/content/ziyara_library_screen.dart';
+import '../features/content/events_screen.dart';
+import '../features/content/imams_screen.dart';
 import '../features/content/quran_library_screen.dart';
-import '../features/library/book_reader_screen.dart';
 import '../features/favorites/favorites_screen.dart';
 import '../features/content/quran_text_reader_screen.dart';
+import '../features/content/local_text_library.dart';
 import '../features/governorate/governorate_selection_screen.dart';
 import '../features/settings/settings_subpages.dart';
 import '../features/settings/developer_panel_screen.dart';
@@ -57,6 +59,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
               path: '/ahl-al-bayt',
               builder: (context, state) => const AhlAlBaytContentScreen()),
+          GoRoute(
+              path: '/imams',
+              builder: (context, state) => const ImamsScreen()),
           GoRoute(
               path: '/wallpapers',
               builder: (context, state) => const WallpapersScreen()),
@@ -123,38 +128,39 @@ final routerProvider = Provider<GoRouter>((ref) {
                   volumeId: state.pathParameters['volumeId'] ?? '')),
           GoRoute(
               path: '/events',
-              builder: (context, state) => const ContentStatusScreen(
-                  title: 'المناسبات الإسلامية',
-                  description:
-                      'التواريخ المحتملة ومصادرها وبيان مواضع الاختلاف.',
-                  contentType: 'event')),
+              builder: (context, state) => const EventsScreen()),
           GoRoute(
               path: '/ethics',
               builder: (context, state) => const ContentStatusScreen(
                   title: 'الأخلاقيات الإسلامية',
-                  description: 'دروس منظمة واختبارات وتقدم تعليمي.',
+                  description: 'دروس أخلاقية نصية محفوظة محلياً.',
                   contentType: 'ethics_lesson')),
+          GoRoute(
+              path: '/stories',
+              builder: (context, state) => const ContentStatusScreen(
+                  title: 'القصص التربوية',
+                  description: 'قصص خيالية أصلية، وليست روايات منسوبة.',
+                  contentType: 'story')),
+          GoRoute(
+              path: '/content/:itemId',
+              builder: (context, state) => LocalTextReaderScreen(
+                  entryId: state.pathParameters['itemId'] ?? '')),
           GoRoute(
               path: '/audio',
               builder: (context, state) => const AudioLibraryScreen()),
           GoRoute(
               path: '/book/:bookId',
               builder: (context, state) {
-                final bookId =
-                    int.tryParse(state.pathParameters['bookId'] ?? '') ?? 0;
-                final extra =
-                    state.extra is Map ? state.extra as Map : const {};
-                final title = extra['title'] is String
+                final extra = state.extra;
+                final title = extra is Map && extra['title'] is String
                     ? extra['title'] as String
-                    : 'قراءة الكتاب';
-                final volumeCount = extra['volumeCount'] is num
-                    ? (extra['volumeCount'] as num)
-                        .toInt()
-                        .clamp(1, 100)
-                        .toInt()
-                    : 1;
-                return BookReaderScreen(
-                    bookId: bookId, bookTitle: title, volumeCount: volumeCount);
+                    : 'المكتبة الإسلامية';
+                // Older book-volume links now open the bundled offline text
+                // catalogue rather than a non-existent PDF/remote reader.
+                return LocalTextLibraryScreen(
+                  category: 'book',
+                  title: title,
+                );
               }),
         ],
       ),
